@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+langchain
+langchain-anthropic
+langchain-openai
+langchain-pinecone
+pinecone-client
+pypdf
+python-multipart
+python-dotenv
+anthropic
+openai
+langchain-community
