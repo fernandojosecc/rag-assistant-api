@@ -48,7 +48,7 @@ def store_in_pinecone(chunks: List[str], index_name: str = "rag-documents") -> i
         # Initialize embeddings
         global embeddings
         if embeddings is None:
-            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002", openai_api_key=os.getenv("OPENAI_API_KEY"))
         
         # Initialize Pinecone
         pinecone_api_key = os.getenv("PINECONE_API_KEY")
@@ -87,12 +87,12 @@ def retrieve_and_answer(question: str, index_name: str = "rag-documents") -> Dic
         # Initialize embeddings
         global embeddings
         if embeddings is None:
-            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002", openai_api_key=os.getenv("OPENAI_API_KEY"))
         
         # Initialize chat model
         global chat_model
         if chat_model is None:
-            chat_model = ChatAnthropic(model="claude-3-haiku-20240307", temperature=0)
+            chat_model = ChatAnthropic(model="claude-haiku-4-5-20251001", temperature=0, anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"))
         
         # Initialize Pinecone
         pinecone_api_key = os.getenv("PINECONE_API_KEY")
