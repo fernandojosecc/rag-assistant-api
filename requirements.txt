@@ -11,3 +11,4 @@ python-dotenv
 anthropic
 openai
 langchain-community
+pydantic-settings

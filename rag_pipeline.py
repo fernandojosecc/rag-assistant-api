@@ -1,155 +1,139 @@
 import os
+import tempfile
 from typing import List, Dict, Any
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
-from pinecone import Pinecone, ServerlessSpec
-import tempfile
+from config import settings, SYSTEM_PROMPT
+from utils import (
+    get_embeddings, 
+    get_chat_model, 
+    get_pinecone_client,
+    validate_file_upload,
+    validate_question,
+    create_pinecone_index_if_not_exists,
+    handle_errors,
+    logger
+)
 
-# Initialize embeddings and models (will be initialized when needed)
-embeddings = None
-chat_model = None
-
-# System prompt for the assistant
-SYSTEM_PROMPT = """You are a helpful document assistant.
-Answer questions based ONLY on the provided document context.
-Always respond with exactly this format:
-English: [your answer in English]
-Español: [tu respuesta en español]
-Source: [copy the most relevant sentence from the context]
-If the answer is not in the document, say so in both languages."""
-
+@handle_errors
 def process_pdf(pdf_file_path: str) -> List[str]:
     """Process PDF file and split into chunks."""
-    try:
-        # Load PDF
-        loader = PyPDFLoader(pdf_file_path)
-        documents = loader.load()
-        
-        # Split into chunks
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50,
-            length_function=len,
-        )
-        
-        chunks = text_splitter.split_documents(documents)
-        return [chunk.page_content for chunk in chunks]
+    logger.info(f"Processing PDF: {pdf_file_path}")
     
-    except Exception as e:
-        raise Exception(f"Error processing PDF: {str(e)}")
+    # Load PDF
+    loader = PyPDFLoader(pdf_file_path)
+    documents = loader.load()
+    
+    # Split into chunks
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
+        length_function=len,
+    )
+    
+    chunks = text_splitter.split_documents(documents)
+    chunk_texts = [chunk.page_content for chunk in chunks]
+    
+    logger.info(f"Processed PDF into {len(chunk_texts)} chunks")
+    return chunk_texts
 
-def store_in_pinecone(chunks: List[str], index_name: str = "rag-documents") -> int:
+@handle_errors
+def store_in_pinecone(chunks: List[str], index_name: str = None) -> int:
     """Store chunks in Pinecone vector database."""
-    try:
-        # Initialize embeddings
-        global embeddings
-        if embeddings is None:
-            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002", openai_api_key=os.getenv("OPENAI_API_KEY"))
+    if index_name is None:
+        index_name = settings.pinecone_index_name
         
-        # Initialize Pinecone
-        pinecone_api_key = os.getenv("PINECONE_API_KEY")
-        if not pinecone_api_key:
-            raise ValueError("PINECONE_API_KEY environment variable is not set")
-        
-        pinecone = Pinecone(api_key=pinecone_api_key)
-        
-        # Create index if it doesn't exist
-        if index_name not in pinecone.list_indexes().names():
-            pinecone.create_index(
-                name=index_name,
-                dimension=1536,  # OpenAI embedding dimension
-                metric="cosine",
-                spec=ServerlessSpec(
-                    cloud="aws",
-                    region="us-west-2"
-                )
-            )
-        
-        # Store chunks in Pinecone
-        vector_store = PineconeVectorStore.from_texts(
-            texts=chunks,
-            embedding=embeddings,
-            index_name=index_name
-        )
-        
-        return len(chunks)
+    logger.info(f"Storing {len(chunks)} chunks in Pinecone index: {index_name}")
     
-    except Exception as e:
-        raise Exception(f"Error storing in Pinecone: {str(e)}")
+    # Create index if it doesn't exist
+    create_pinecone_index_if_not_exists(index_name)
+    
+    # Get embeddings and store chunks
+    embeddings = get_embeddings()
+    vector_store = PineconeVectorStore.from_texts(
+        texts=chunks,
+        embedding=embeddings,
+        index_name=index_name
+    )
+    
+    logger.info(f"Successfully stored {len(chunks)} chunks in Pinecone")
+    return len(chunks)
 
-def retrieve_and_answer(question: str, index_name: str = "rag-documents") -> Dict[str, Any]:
+@handle_errors
+def retrieve_and_answer(question: str, index_name: str = None) -> Dict[str, Any]:
     """Retrieve relevant chunks and generate answer."""
-    try:
-        # Initialize embeddings
-        global embeddings
-        if embeddings is None:
-            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002", openai_api_key=os.getenv("OPENAI_API_KEY"))
+    if index_name is None:
+        index_name = settings.pinecone_index_name
         
-        # Initialize chat model
-        global chat_model
-        if chat_model is None:
-            chat_model = ChatAnthropic(model="claude-haiku-4-5-20251001", temperature=0, anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"))
-        
-        # Initialize Pinecone
-        pinecone_api_key = os.getenv("PINECONE_API_KEY")
-        if not pinecone_api_key:
-            raise ValueError("PINECONE_API_KEY environment variable is not set")
-        
-        # Connect to existing index
-        vector_store = PineconeVectorStore.from_existing_index(
-            index_name=index_name,
-            embedding=embeddings
-        )
-        
-        # Retrieve relevant chunks
-        docs = vector_store.similarity_search(question, k=4)
-        context = "\n\n".join([doc.page_content for doc in docs])
-        
-        # Generate answer using Claude Haiku
-        messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(content=f"Context:\n{context}\n\nQuestion: {question}")
-        ]
-        
-        response = chat_model.invoke(messages)
-        answer = response.content
-        
-        # Extract sources
-        sources = [doc.page_content for doc in docs]
-        
-        return {
-            "answer": answer,
-            "sources": sources
-        }
+    logger.info(f"Processing question: {question[:100]}...")
     
-    except Exception as e:
-        raise Exception(f"Error retrieving and answering: {str(e)}")
+    # Validate question
+    validate_question(question)
+    
+    # Get instances
+    embeddings = get_embeddings()
+    chat_model = get_chat_model()
+    
+    # Connect to existing index
+    vector_store = PineconeVectorStore.from_existing_index(
+        index_name=index_name,
+        embedding=embeddings
+    )
+    
+    # Retrieve relevant chunks
+    docs = vector_store.similarity_search(question, k=settings.max_retrieved_docs)
+    context = "\n\n".join([doc.page_content for doc in docs])
+    
+    logger.info(f"Retrieved {len(docs)} relevant documents")
+    
+    # Generate answer using Claude Haiku
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=f"Context:\n{context}\n\nQuestion: {question}")
+    ]
+    
+    response = chat_model.invoke(messages)
+    answer = response.content
+    
+    # Extract sources
+    sources = [doc.page_content for doc in docs]
+    
+    logger.info("Generated answer successfully")
+    return {
+        "answer": answer,
+        "sources": sources
+    }
 
+@handle_errors
 def process_and_store_pdf(pdf_file) -> int:
     """Process uploaded PDF file and store in Pinecone."""
-    try:
-        # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-            content = pdf_file.file.read()
-            temp_file.write(content)
-            temp_file_path = temp_file.name
-        
-        try:
-            # Process PDF
-            chunks = process_pdf(temp_file_path)
-            
-            # Store in Pinecone
-            chunk_count = store_in_pinecone(chunks)
-            
-            return chunk_count
-        
-        finally:
-            # Clean up temporary file
-            os.unlink(temp_file_path)
+    logger.info("Processing uploaded PDF file")
     
-    except Exception as e:
-        raise Exception(f"Error processing and storing PDF: {str(e)}")
+    # Validate file
+    validate_file_upload(pdf_file.filename, len(pdf_file.file.read()))
+    
+    # Reset file pointer after reading
+    pdf_file.file.seek(0)
+    
+    # Save uploaded file temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+        content = pdf_file.file.read()
+        temp_file.write(content)
+        temp_file_path = temp_file.name
+    
+    try:
+        # Process PDF
+        chunks = process_pdf(temp_file_path)
+        
+        # Store in Pinecone
+        chunk_count = store_in_pinecone(chunks)
+        
+        logger.info(f"Successfully processed and stored {chunk_count} chunks")
+        return chunk_count
+        
+    finally:
+        # Clean up temporary file
+        os.unlink(temp_file_path)
+        logger.info("Cleaned up temporary file")
