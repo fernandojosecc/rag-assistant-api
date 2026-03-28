@@ -9,9 +9,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pinecone import Pinecone, ServerlessSpec
 import tempfile
 
-# Initialize embeddings and models
-embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
-chat_model = ChatAnthropic(model="claude-3-haiku-20240307", temperature=0)
+# Initialize embeddings and models (will be initialized when needed)
+embeddings = None
+chat_model = None
 
 # System prompt for the assistant
 SYSTEM_PROMPT = """You are a helpful document assistant.
@@ -45,6 +45,11 @@ def process_pdf(pdf_file_path: str) -> List[str]:
 def store_in_pinecone(chunks: List[str], index_name: str = "rag-documents") -> int:
     """Store chunks in Pinecone vector database."""
     try:
+        # Initialize embeddings
+        global embeddings
+        if embeddings is None:
+            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+        
         # Initialize Pinecone
         pinecone_api_key = os.getenv("PINECONE_API_KEY")
         if not pinecone_api_key:
@@ -79,6 +84,16 @@ def store_in_pinecone(chunks: List[str], index_name: str = "rag-documents") -> i
 def retrieve_and_answer(question: str, index_name: str = "rag-documents") -> Dict[str, Any]:
     """Retrieve relevant chunks and generate answer."""
     try:
+        # Initialize embeddings
+        global embeddings
+        if embeddings is None:
+            embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+        
+        # Initialize chat model
+        global chat_model
+        if chat_model is None:
+            chat_model = ChatAnthropic(model="claude-3-haiku-20240307", temperature=0)
+        
         # Initialize Pinecone
         pinecone_api_key = os.getenv("PINECONE_API_KEY")
         if not pinecone_api_key:
