@@ -39,7 +39,11 @@ class Settings(BaseSettings):
     api_port: int = 8000
     
     # CORS Configuration
-    cors_origins: list = ["*"]  # Default for development, should be restricted in production
+    cors_origins: list = [
+    "https://rag-assistant-8v19tveqq-fernandos-projects-8edfe986.vercel.app",
+    "http://localhost:3000",  # Keep for local development
+    "http://localhost:8000"   # Keep for local development
+]
     
     class Config:
         env_file = ".env"
