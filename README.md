@@ -235,15 +235,15 @@ This is a portfolio project demonstrating AI engineering capabilities. For learn
 ## 📞 Support
 
 **Author**: Fernando Contreras  
-**Portfolio**: [Your Portfolio URL]  
-**Email**: [Your Email]
+**Portfolio**: fernandocontreras.dev  
+**Email**: fernandorodasc1@gmail.com
 
 ## 🔗 Links
 
-- **🚀 Live Demo**: [Your Vercel Frontend URL]
-- **📱 Frontend Repo**: [Your Next.js Repository URL]  
+- **🚀 Live Demo**: https://rag-assistant-ui.vercel.app/
+- **📱 Frontend Repo**: https://github.com/fernandojosecc/rag-assistant-ui
 - **🔧 Backend Repo**: https://github.com/fernandojosecc/rag-assistant-api
-- **👨‍💻 Portfolio**: [Your Portfolio URL]
+- **👨‍💻 Portfolio**: fernandocontreras.dev
 
 ## 📄 License
 
