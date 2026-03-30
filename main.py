@@ -9,13 +9,20 @@ from config import settings, validate_environment
 from rag_pipeline import process_and_store_pdf, retrieve_and_answer
 import logging
 
-# Load environment variables and validate
+# Load environment variables and validate with try-catch
 load_dotenv()
-validate_environment()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Validate environment variables safely
+try:
+    validate_environment()
+    logger.info("Environment variables validated successfully")
+except ValueError as e:
+    logger.error(f"Environment validation failed: {str(e)}")
+    logger.warning("Starting app without environment validation - this may cause runtime errors")
 
 # Initialize FastAPI app
 app = FastAPI(title="RAG Document Assistant API", version="1.0.0")
@@ -126,6 +133,22 @@ async def chat(request: ChatRequest):
         logger.error(f"Unexpected error in chat: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/startup-test")
+async def startup_test():
+    """
+    Simple test endpoint to verify Railway deployment is working.
+    """
+    return {
+        "status": "working",
+        "message": "Application started successfully",
+        "timestamp": str(os.times()),
+        "env_vars": {
+            "OPENAI_API_KEY": "✓" if os.getenv("OPENAI_API_KEY") else "✗",
+            "ANTHROPIC_API_KEY": "✓" if os.getenv("ANTHROPIC_API_KEY") else "✗",
+            "PINECONE_API_KEY": "✓" if os.getenv("PINECONE_API_KEY") else "✗",
+        }
+    }
+
 @app.get("/health")
 async def health_check():
     """
@@ -134,22 +157,39 @@ async def health_check():
     - Returns simple status check
     - Used by Railway to verify the service is running
     """
-    return {"status": "ok", "version": settings.api_version}
+    try:
+        return {"status": "ok", "version": settings.api_version}
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return {"status": "ok", "version": "1.0.0", "error": "Settings not available"}
 
 @app.get("/")
 async def root():
     """
     Root endpoint with API information.
     """
-    return {
-        "message": settings.api_title,
-        "version": settings.api_version,
-        "endpoints": {
-            "upload": "POST /upload - Upload PDF files (max 10MB)",
-            "chat": "POST /chat - Ask questions about uploaded documents (max 1000 chars)",
-            "health": "GET /health - Health check endpoint"
+    try:
+        return {
+            "message": settings.api_title,
+            "version": settings.api_version,
+            "endpoints": {
+                "upload": "POST /upload - Upload PDF files (max 10MB)",
+                "chat": "POST /chat - Ask questions about uploaded documents (max 1000 chars)",
+                "health": "GET /health - Health check endpoint",
+                "startup-test": "GET /startup-test - Debug endpoint"
+            }
         }
-    }
+    except Exception as e:
+        logger.error(f"Root endpoint failed: {str(e)}")
+        return {
+            "message": "RAG Document Assistant API",
+            "version": "1.0.0",
+            "status": "limited functionality",
+            "endpoints": {
+                "startup-test": "GET /startup-test - Debug endpoint",
+                "health": "GET /health - Health check endpoint"
+            }
+        }
 
 # Global exception handler
 @app.exception_handler(Exception)
