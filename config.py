@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     
     # CORS Configuration
     cors_origins: list = [
-    "https://rag-assistant-8v19tveqq-fernandos-projects-8edfe986.vercel.app",
+    "https://rag-assistant-d26whhnl5-fernandos-projects-8edfe986.vercel.app",
     "http://localhost:3000",  # Keep for local development
     "http://localhost:8000"   # Keep for local development
 ]
