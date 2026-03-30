@@ -149,6 +149,14 @@ async def startup_test():
         }
     }
 
+@app.get("/up")
+async def railway_health_check():
+    """
+    Simple health check for Railway.
+    Railway often checks /up endpoint.
+    """
+    return {"status": "ok"}
+
 @app.get("/health")
 async def health_check():
     """
@@ -157,11 +165,7 @@ async def health_check():
     - Returns simple status check
     - Used by Railway to verify the service is running
     """
-    try:
-        return {"status": "ok", "version": settings.api_version}
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        return {"status": "ok", "version": "1.0.0", "error": "Settings not available"}
+    return {"status": "ok"}
 
 @app.get("/")
 async def root():
